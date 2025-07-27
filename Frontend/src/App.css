@@ -1,0 +1,8 @@
+/* Remove default styles if needed */
+#root {
+  height: 100vh;
+}
+
+.App {
+  height: 100vh;
+}
