@@ -1,25 +1,42 @@
 import React, { useEffect } from 'react';
-import { Bot } from 'lucide-react';
+import { Bot, Menu } from 'lucide-react';
 import MessageList from './MessageList';
 import UserInput from './UserInput';
+import ConversationSidebar from './ConversationSidebar';
 import useChatStore from '../store/chatStore';
 
 const ChatWindow = () => {
   const { 
-    sendMessage, 
-    setConversationId, 
-    clearMessages,
+    sendMessage,
+    createNewConversation,
+    currentConversationId,
     error,
-    clearError 
+    clearError,
+    isSidebarOpen,
+    toggleSidebar,
+    saveCurrentConversation,
+    messages
   } = useChatStore();
 
-  // Initialize conversation on component mount
+  // Initialize with a new conversation on first load
   useEffect(() => {
-    // You can set a conversation ID here if needed
-    // setConversationId(generateConversationId());
-  }, [setConversationId]);
+    if (!currentConversationId) {
+      createNewConversation();
+    }
+  }, [currentConversationId, createNewConversation]);
 
-  // API call function to pass to sendMessage
+  // Save conversation periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (messages.length > 0) {
+        saveCurrentConversation();
+      }
+    }, 30000); // Save every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [messages.length, saveCurrentConversation]);
+
+  // API call function
   const sendMessageToAPI = async (message) => {
     try {
       // Replace with your actual backend API endpoint
@@ -30,7 +47,7 @@ const ChatWindow = () => {
         },
         body: JSON.stringify({
           message: message,
-          // Add any other required fields like user_id, conversation_id, etc.
+          conversationId: currentConversationId,
         }),
       });
 
@@ -39,7 +56,7 @@ const ChatWindow = () => {
       }
 
       const data = await response.json();
-      return data.response; // Adjust based on your API response structure
+      return data.response;
     } catch (error) {
       throw new Error(error.message || 'Failed to send message');
     }
@@ -49,54 +66,73 @@ const ChatWindow = () => {
     await sendMessage(messageContent, sendMessageToAPI);
   };
 
-  const handleClearChat = () => {
-    clearMessages();
-    clearError();
+  const handleNewChat = () => {
+    createNewConversation();
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
-            <Bot size={20} className="text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-gray-800">AI Assistant</h1>
-            <p className="text-sm text-gray-500">Always here to help</p>
-          </div>
-        </div>
-        
-        {/* Clear chat button */}
-        <button
-          onClick={handleClearChat}
-          className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors"
-        >
-          Clear Chat
-        </button>
-      </div>
+    <div className="flex h-screen bg-gray-50">
+      {/* Conversation Sidebar */}
+      <ConversationSidebar />
 
-      {/* Error Display */}
-      {error && (
-        <div className="bg-red-50 border-l-4 border-red-400 p-4 mx-4 mt-2">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-red-700">{error}</p>
+      {/* Main Chat Area */}
+      <div 
+        className={`flex flex-col flex-1 transition-all duration-300 ${
+          isSidebarOpen ? 'ml-80' : 'ml-0'
+        }`}
+      >
+        {/* Header */}
+        <div className="bg-white border-b px-6 py-4 flex items-center justify-between relative">
+          <div className="flex items-center gap-3">
+            {/* Mobile menu button - only visible on mobile */}
             <button
-              onClick={clearError}
-              className="text-red-400 hover:text-red-600"
+              onClick={toggleSidebar}
+              className="lg:hidden p-2 hover:bg-gray-100 rounded-md mr-2"
             >
-              ×
+              <Menu size={20} />
             </button>
+            
+            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
+              <Bot size={20} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold text-gray-800">AI Assistant</h1>
+              <p className="text-sm text-gray-500">
+                {currentConversationId ? 'Active conversation' : 'Ready to chat'}
+              </p>
+            </div>
           </div>
+          
+          {/* New Chat Button */}
+          <button
+            onClick={handleNewChat}
+            className="px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors"
+          >
+            New Chat
+          </button>
         </div>
-      )}
 
-      {/* Messages */}
-      <MessageList />
+        {/* Error Display */}
+        {error && (
+          <div className="bg-red-50 border-l-4 border-red-400 p-4 mx-4 mt-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-red-700">{error}</p>
+              <button
+                onClick={clearError}
+                className="text-red-400 hover:text-red-600"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
 
-      {/* Input */}
-      <UserInput onSendMessage={handleSendMessage} />
+        {/* Messages */}
+        <MessageList />
+
+        {/* Input */}
+        <UserInput onSendMessage={handleSendMessage} />
+      </div>
     </div>
   );
 };

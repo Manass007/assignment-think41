@@ -4,18 +4,16 @@ import { devtools } from 'zustand/middleware';
 const useChatStore = create(
   devtools(
     (set, get) => ({
-      // Message list state
+      // Current conversation state
       messages: [],
-      
-      // Loading status indicator
       isLoading: false,
-      
-      // User input value
       userInput: '',
-      
-      // Additional useful states
       error: null,
       currentConversationId: null,
+      
+      // Conversations management
+      conversations: [], // Array of past conversations
+      isSidebarOpen: true, // Sidebar visibility
       
       // Actions for message management
       addMessage: (message) =>
@@ -48,7 +46,7 @@ const useChatStore = create(
       
       addAIMessage: (content) => {
         const aiMessage = {
-          id: Date.now() + Math.random(), // Ensure unique ID
+          id: Date.now() + Math.random(),
           content,
           isUser: false,
           timestamp: new Date(),
@@ -65,7 +63,7 @@ const useChatStore = create(
         return aiMessage;
       },
       
-      // Clear all messages
+      // Clear current conversation messages
       clearMessages: () =>
         set(
           { messages: [] },
@@ -119,9 +117,141 @@ const useChatStore = create(
           'setConversationId'
         ),
       
-      // Complex action: Send message (handles both user and AI response)
+      // Sidebar management
+      toggleSidebar: () =>
+        set(
+          (state) => ({ isSidebarOpen: !state.isSidebarOpen }),
+          false,
+          'toggleSidebar'
+        ),
+      
+      setSidebarOpen: (open) =>
+        set(
+          { isSidebarOpen: open },
+          false,
+          'setSidebarOpen'
+        ),
+      
+      // Create new conversation
+      createNewConversation: () => {
+        const { messages, currentConversationId, saveCurrentConversation } = get();
+        
+        // Save current conversation if it has messages
+        if (messages.length > 0 && currentConversationId) {
+          saveCurrentConversation();
+        }
+        
+        // Create new conversation
+        const newConversationId = `conv_${Date.now()}`;
+        
+        set(
+          {
+            currentConversationId: newConversationId,
+            messages: [],
+            error: null,
+          },
+          false,
+          'createNewConversation'
+        );
+        
+        return newConversationId;
+      },
+      
+      // Save current conversation to conversations list
+      saveCurrentConversation: () => {
+        const { messages, currentConversationId, conversations } = get();
+        
+        if (!currentConversationId || messages.length === 0) return;
+        
+        // Generate conversation title from first user message
+        const firstUserMessage = messages.find(msg => msg.isUser);
+        const title = firstUserMessage 
+          ? firstUserMessage.content.slice(0, 50) + (firstUserMessage.content.length > 50 ? '...' : '')
+          : 'New Conversation';
+        
+        const conversationToSave = {
+          id: currentConversationId,
+          title,
+          messages: [...messages],
+          lastUpdated: new Date(),
+          messageCount: messages.length,
+        };
+        
+        // Update existing conversation or add new one
+        const existingIndex = conversations.findIndex(conv => conv.id === currentConversationId);
+        
+        let updatedConversations;
+        if (existingIndex >= 0) {
+          updatedConversations = [...conversations];
+          updatedConversations[existingIndex] = conversationToSave;
+        } else {
+          updatedConversations = [conversationToSave, ...conversations];
+        }
+        
+        set(
+          { conversations: updatedConversations },
+          false,
+          'saveCurrentConversation'
+        );
+      },
+      
+      // Load conversation from history
+      loadConversation: (conversationId) => {
+        const { conversations, saveCurrentConversation, currentConversationId, messages } = get();
+        
+        // Save current conversation before switching
+        if (currentConversationId && messages.length > 0) {
+          saveCurrentConversation();
+        }
+        
+        const conversation = conversations.find(conv => conv.id === conversationId);
+        
+        if (conversation) {
+          set(
+            {
+              currentConversationId: conversationId,
+              messages: [...conversation.messages],
+              error: null,
+            },
+            false,
+            'loadConversation'
+          );
+        }
+      },
+      
+      // Delete conversation
+      deleteConversation: (conversationId) => {
+        const { conversations, currentConversationId } = get();
+        
+        const updatedConversations = conversations.filter(conv => conv.id !== conversationId);
+        
+        // If deleting current conversation, create new one
+        const updates = { conversations: updatedConversations };
+        if (currentConversationId === conversationId) {
+          updates.currentConversationId = null;
+          updates.messages = [];
+        }
+        
+        set(updates, false, 'deleteConversation');
+      },
+      
+      // Complex action: Send message with conversation handling
       sendMessage: async (messageContent, apiCall) => {
-        const { addUserMessage, setLoading, addAIMessage, setError, clearError } = get();
+        const { 
+          addUserMessage, 
+          setLoading, 
+          addAIMessage, 
+          setError, 
+          clearError,
+          currentConversationId,
+          createNewConversation,
+          saveCurrentConversation
+        } = get();
+        
+        // Create new conversation if none exists
+        if (!currentConversationId) {
+          createNewConversation();
+        }
         
         // Clear any previous errors
         clearError();
@@ -133,11 +263,14 @@ const useChatStore = create(
         setLoading(true);
         
         try {
-          // Call API (passed as parameter for flexibility)
+          // Call API
           const aiResponse = await apiCall(messageContent);
           
           // Add AI response
           addAIMessage(aiResponse);
+          
+          // Save conversation after successful exchange
+          setTimeout(() => saveCurrentConversation(), 100);
           
         } catch (error) {
           console.error('Error sending message:', error);
@@ -162,18 +295,18 @@ const useChatStore = create(
         return messages.length;
       },
       
-      getUserMessages: () => {
-        const { messages } = get();
-        return messages.filter(msg => msg.isUser);
+      getConversationsCount: () => {
+        const { conversations } = get();
+        return conversations.length;
       },
       
-      getAIMessages: () => {
-        const { messages } = get();
-        return messages.filter(msg => !msg.isUser);
+      getCurrentConversation: () => {
+        const { conversations, currentConversationId } = get();
+        return conversations.find(conv => conv.id === currentConversationId) || null;
       },
     }),
     {
-      name: 'chat-store', // unique name for devtools
+      name: 'chat-store',
     }
   )
 );
