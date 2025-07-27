@@ -1,9 +1,11 @@
 import React, { useRef, useEffect } from 'react';
 import { Bot, Loader2 } from 'lucide-react';
 import Message from './Message';
+import useChatStore from '../store/chatStore';
 
-const MessageList = ({ messages, isLoading }) => {
+const MessageList = () => {
   const messagesEndRef = useRef(null);
+  const { messages, isLoading } = useChatStore();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
