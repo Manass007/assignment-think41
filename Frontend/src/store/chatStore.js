@@ -9,11 +9,15 @@ const useChatStore = create(
       isLoading: false,
       userInput: '',
       error: null,
-      currentConversationId: null,
+      currentConversationId: null, // Now maps to backend conversation_id
       
       // Conversations management
       conversations: [], // Array of past conversations
       isSidebarOpen: true, // Sidebar visibility
+      
+      // Authentication state (if you want to manage it in store)
+      isAuthenticated: false,
+      user: null,
       
       // Actions for message management
       addMessage: (message) =>
@@ -25,9 +29,10 @@ const useChatStore = create(
           'addMessage'
         ),
       
-      addUserMessage: (content) => {
+      // Updated to handle backend message format
+      addUserMessage: (content, messageId = null) => {
         const userMessage = {
-          id: Date.now(),
+          id: messageId || `user_${Date.now()}`,
           content,
           isUser: true,
           timestamp: new Date(),
@@ -44,9 +49,10 @@ const useChatStore = create(
         return userMessage;
       },
       
-      addAIMessage: (content) => {
+      // Updated to handle backend message format
+      addAIMessage: (content, messageId = null) => {
         const aiMessage = {
-          id: Date.now() + Math.random(),
+          id: messageId || `ai_${Date.now()}_${Math.random()}`,
           content,
           isUser: false,
           timestamp: new Date(),
@@ -61,6 +67,31 @@ const useChatStore = create(
         );
         
         return aiMessage;
+      },
+      
+      // Add both user and AI messages from API response
+      addMessagePair: (userMessage, aiMessage) => {
+        const userMsg = {
+          id: userMessage.id,
+          content: userMessage.content,
+          isUser: true,
+          timestamp: new Date(userMessage.timestamp),
+        };
+        
+        const aiMsg = {
+          id: aiMessage.id,
+          content: aiMessage.content,
+          isUser: false,
+          timestamp: new Date(aiMessage.timestamp),
+        };
+        
+        set(
+          (state) => ({
+            messages: [...state.messages, userMsg, aiMsg],
+          }),
+          false,
+          'addMessagePair'
+        );
       },
       
       // Clear current conversation messages
@@ -109,7 +140,7 @@ const useChatStore = create(
           'clearError'
         ),
       
-      // Conversation management
+      // Conversation management - updated for backend integration
       setConversationId: (id) =>
         set(
           { currentConversationId: id },
@@ -132,7 +163,36 @@ const useChatStore = create(
           'setSidebarOpen'
         ),
       
-      // Create new conversation
+      // Authentication actions
+      setAuthenticated: (authenticated) =>
+        set(
+          { isAuthenticated: authenticated },
+          false,
+          'setAuthenticated'
+        ),
+      
+      setUser: (user) =>
+        set(
+          { user },
+          false,
+          'setUser'
+        ),
+      
+      logout: () =>
+        set(
+          {
+            isAuthenticated: false,
+            user: null,
+            currentConversationId: null,
+            messages: [],
+            conversations: [],
+            error: null,
+          },
+          false,
+          'logout'
+        ),
+      
+      // Create new conversation - simplified since backend handles this
       createNewConversation: () => {
         const { messages, currentConversationId, saveCurrentConversation } = get();
         
@@ -141,20 +201,16 @@ const useChatStore = create(
           saveCurrentConversation();
         }
         
-        // Create new conversation
-        const newConversationId = `conv_${Date.now()}`;
-        
+        // Clear current state - backend will assign new conversation ID on first message
         set(
           {
-            currentConversationId: newConversationId,
+            currentConversationId: null,
             messages: [],
             error: null,
           },
           false,
           'createNewConversation'
         );
-        
-        return newConversationId;
       },
       
       // Save current conversation to conversations list
@@ -193,6 +249,30 @@ const useChatStore = create(
           false,
           'saveCurrentConversation'
         );
+        
+        // Persist to localStorage if available
+        try {
+          if (typeof Storage !== 'undefined' && localStorage) {
+            localStorage.setItem('chat_conversations', JSON.stringify(updatedConversations));
+          }
+        } catch (error) {
+          console.warn('Could not save conversations to localStorage:', error);
+        }
+      },
+      
+      // Load conversations from localStorage
+      loadSavedConversations: () => {
+        try {
+          if (typeof Storage !== 'undefined' && localStorage) {
+            const saved = localStorage.getItem('chat_conversations');
+            if (saved) {
+              const conversations = JSON.parse(saved);
+              set({ conversations }, false, 'loadSavedConversations');
+            }
+          }
+        } catch (error) {
+          console.warn('Could not load conversations from localStorage:', error);
+        }
       },
       
       // Load conversation from history
@@ -233,9 +313,18 @@ const useChatStore = create(
         }
         
         set(updates, false, 'deleteConversation');
+        
+        // Update localStorage
+        try {
+          if (typeof Storage !== 'undefined' && localStorage) {
+            localStorage.setItem('chat_conversations', JSON.stringify(updatedConversations));
+          }
+        } catch (error) {
+          console.warn('Could not update localStorage:', error);
+        }
       },
       
-      // Complex action: Send message with conversation handling
+      // Enhanced sendMessage function for backend integration
       sendMessage: async (messageContent, apiCall) => {
         const { 
           addUserMessage, 
@@ -244,41 +333,156 @@ const useChatStore = create(
           setError, 
           clearError,
           currentConversationId,
-          createNewConversation,
+          setConversationId,
           saveCurrentConversation
         } = get();
-        
-        // Create new conversation if none exists
-        if (!currentConversationId) {
-          createNewConversation();
-        }
         
         // Clear any previous errors
         clearError();
         
-        // Add user message
-        addUserMessage(messageContent);
+        // Add user message immediately for better UX
+        const tempUserMessage = addUserMessage(messageContent);
         
         // Set loading state
         setLoading(true);
         
         try {
-          // Call API
-          const aiResponse = await apiCall(messageContent);
+          // Call the API - this should return the backend response format
+          const response = await apiCall(messageContent);
           
-          // Add AI response
-          addAIMessage(aiResponse);
+          // Handle different response formats
+          if (response.conversationId && response.userMessage && response.aiMessage) {
+            // Full backend response format
+            
+            // Update conversation ID if it's new
+            if (response.conversationId !== currentConversationId) {
+              setConversationId(response.conversationId);
+            }
+            
+            // Replace the temporary user message with the real one from backend
+            set(
+              (state) => ({
+                messages: [
+                  ...state.messages.filter(msg => msg.id !== tempUserMessage.id),
+                  {
+                    id: response.userMessage.id,
+                    content: response.userMessage.content,
+                    isUser: true,
+                    timestamp: response.userMessage.timestamp,
+                  },
+                  {
+                    id: response.aiMessage.id,
+                    content: response.aiMessage.content,
+                    isUser: false,
+                    timestamp: response.aiMessage.timestamp,
+                  }
+                ],
+              }),
+              false,
+              'updateMessagesFromAPI'
+            );
+          } else if (typeof response === 'string') {
+            // Simple string response (fallback)
+            addAIMessage(response);
+          } else {
+            // Unknown response format
+            addAIMessage("I received your message but couldn't process the response properly.");
+          }
           
           // Save conversation after successful exchange
           setTimeout(() => saveCurrentConversation(), 100);
           
         } catch (error) {
           console.error('Error sending message:', error);
+          
+          // Remove the temporary user message on error
+          set(
+            (state) => ({
+              messages: state.messages.filter(msg => msg.id !== tempUserMessage.id),
+            }),
+            false,
+            'removeFailedMessage'
+          );
+          
           setError(error.message || 'Failed to send message');
           
           // Add error message to chat
           addAIMessage("Sorry, I'm having trouble connecting right now. Please try again.");
           
+        } finally {
+          setLoading(false);
+        }
+      },
+      
+      // Simpler version for when you just want to add messages manually
+      addManualMessages: (userContent, aiContent, conversationId = null) => {
+        const { setConversationId, currentConversationId } = get();
+        
+        if (conversationId && conversationId !== currentConversationId) {
+          setConversationId(conversationId);
+        }
+        
+        const userMessage = {
+          id: `manual_user_${Date.now()}`,
+          content: userContent,
+          isUser: true,
+          timestamp: new Date(),
+        };
+        
+        const aiMessage = {
+          id: `manual_ai_${Date.now()}_${Math.random()}`,
+          content: aiContent,
+          isUser: false,
+          timestamp: new Date(),
+        };
+        
+        set(
+          (state) => ({
+            messages: [...state.messages, userMessage, aiMessage],
+          }),
+          false,
+          'addManualMessages'
+        );
+      },
+      
+      // Helper function to format backend messages for display
+      formatBackendMessage: (backendMessage) => ({
+        id: backendMessage.id,
+        content: backendMessage.text,
+        isUser: backendMessage.sender === 'user',
+        timestamp: new Date(backendMessage.timestamp),
+      }),
+      
+      // Load conversation history from backend (if you implement this endpoint)
+      loadConversationFromBackend: async (conversationId, apiCall) => {
+        const { setLoading, setError, clearError, setConversationId } = get();
+        
+        setLoading(true);
+        clearError();
+        
+        try {
+          const conversationData = await apiCall(conversationId);
+          
+          // Assuming backend returns { id, messages: [...] }
+          const formattedMessages = conversationData.messages.map(msg => ({
+            id: msg.id,
+            content: msg.text,
+            isUser: msg.sender === 'user',
+            timestamp: new Date(msg.timestamp),
+          }));
+          
+          set(
+            {
+              currentConversationId: conversationId,
+              messages: formattedMessages,
+            },
+            false,
+            'loadConversationFromBackend'
+          );
+          
+        } catch (error) {
+          console.error('Error loading conversation:', error);
+          setError('Failed to load conversation');
         } finally {
           setLoading(false);
         }
@@ -303,6 +507,27 @@ const useChatStore = create(
       getCurrentConversation: () => {
         const { conversations, currentConversationId } = get();
         return conversations.find(conv => conv.id === currentConversationId) || null;
+      },
+      
+      // Debug helpers
+      getState: () => get(),
+      
+      resetStore: () => {
+        set(
+          {
+            messages: [],
+            isLoading: false,
+            userInput: '',
+            error: null,
+            currentConversationId: null,
+            conversations: [],
+            isSidebarOpen: true,
+            isAuthenticated: false,
+            user: null,
+          },
+          false,
+          'resetStore'
+        );
       },
     }),
     {
