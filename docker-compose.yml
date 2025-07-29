@@ -1,0 +1,62 @@
+
+services:
+  # Database service (SQLite is file-based, but we'll use PostgreSQL for better Docker setup)
+  database:
+    image: postgres:15-alpine
+    container_name: chat-database
+    environment:
+      POSTGRES_DB: chatapp
+      POSTGRES_USER: chatuser
+      POSTGRES_PASSWORD: chatpassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./Backend:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - chat-network
+
+  # Backend service (Django)
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: chat-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=1
+      - DATABASE_URL=postgresql://chatuser:chatpassword@database:5432/chatapp
+    depends_on:
+      - database
+    volumes:
+      - ./Backend:/app
+    networks:
+      - chat-network
+
+  # Frontend service (React with Vite)
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+    container_name: chat-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./Frontend:/app
+      - /app/node_modules
+    networks:
+      - chat-network
+
+# Define volumes
+volumes:
+  postgres_data:
+
+# Define networks
+networks:
+  chat-network:
+    driver: bridge

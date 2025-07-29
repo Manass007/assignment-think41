@@ -1,2 +1,7 @@
 psycopg2-binary
 pandas
+requests
+Django>=4.2.0
+djangorestframework
+django-cors-headers
+djangorestframework-simplejwt

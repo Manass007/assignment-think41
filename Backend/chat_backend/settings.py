@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
-
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -58,6 +58,8 @@ MIDDLEWARE = [
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Your Vite dev server
     "http://127.0.0.1:5173",  # Alternative localhost
+    "http://localhost:3000",  # Docker frontend
+    "http://127.0.0.1:3000",  # Docker frontend alternative
 ]
 
 # Allow credentials (for authentication)
@@ -105,16 +107,31 @@ WSGI_APPLICATION = 'chat_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'ecommerce',      # This is your database name
-        'USER': 'postgres',
-        'PASSWORD': 'admin',
-        'HOST': 'localhost',
-        'PORT': '5432',
+# Check if we're running in Docker
+if os.environ.get('DATABASE_URL'):
+    # Docker database configuration
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'chatapp',
+            'USER': 'chatuser', 
+            'PASSWORD': 'chatpassword',
+            'HOST': 'database',  # Docker service name
+            'PORT': '5432',
+        }
     }
-}
+else:
+    # Local development database configuration (keep your existing settings)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'ecommerce',      # This is your database name
+            'USER': 'postgres',
+            'PASSWORD': 'admin',
+            'HOST': 'localhost',
+            'PORT': '5432',
+        }
+    }
 
 
 # Password validation
