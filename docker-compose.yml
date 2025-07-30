@@ -1,13 +1,12 @@
-
 services:
-  # Database service (SQLite is file-based, but we'll use PostgreSQL for better Docker setup)
+  # Database service
   database:
     image: postgres:15-alpine
     container_name: chat-database
     environment:
-      POSTGRES_DB: chatapp
-      POSTGRES_USER: chatuser
-      POSTGRES_PASSWORD: chatpassword
+      POSTGRES_DB: ecommerce
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./Backend:/docker-entrypoint-initdb.d
@@ -26,7 +25,7 @@ services:
       - "8000:8000"
     environment:
       - DEBUG=1
-      - DATABASE_URL=postgresql://chatuser:chatpassword@database:5432/chatapp
+      - DATABASE_URL=postgresql://postgres:admin@database:5432/ecommerce
     depends_on:
       - database
     volumes:

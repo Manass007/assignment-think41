@@ -57,21 +57,69 @@ In a new terminal window:
 # Run database migrations
 docker-compose exec backend python manage.py migrate
 
-# Create a superuser for Django admin (Method 1)
+# Create a superuser for Django admin
 docker-compose exec backend python manage.py createsuperuser
-
-# Alternative method if above doesn't work (Method 2)
-docker exec -it chat-backend python manage.py createsuperuser
 ```
 
 Follow the prompts to create your admin account with:
-- **Username**: Choose a username (e.g., `admin`)
-- **Email**: Enter your email address
+- **Username**: Choose a username (e.g., `your_name`)
+- **Email**: Enter your email address (e.g., `example@gmail.com`)
 - **Password**: Create a secure password
 
-> **⚠️ Important**: After creating the superuser, you must **login first** using these credentials to access the complete AI functionalities. The application requires authentication to enable all chat features and AI-powered responses.
+### 5. Load Sample Data (Optional)
 
-### 5. Access the Application
+The application includes sample e-commerce data that can be loaded for testing and demonstration purposes:
+
+```bash
+# Access the backend container
+docker exec -it chat-backend bash
+
+# Update the database host in local_data.py (if not already done)
+# Change DB_HOST from "localhost" to "database" in local_data.py
+
+# Load the sample data
+python local_data.py
+```
+
+This will populate your database with:
+- **100,000 users** - Sample customer data
+- **29,120 products** - Product catalog with categories, brands, and pricing
+- **125,226+ orders** - Order history and transaction data
+- **Distribution centers** - Warehouse and fulfillment locations
+- **Inventory items** - Stock management data
+- **Order items** - Individual line items within orders
+
+**Verify data loading:**
+```bash
+# Access Django shell to verify data
+python manage.py shell
+```
+
+Then run:
+```python
+from django.db import connection
+cursor = connection.cursor()
+
+# Check data counts
+cursor.execute("SELECT COUNT(*) FROM users")
+print(f"Users: {cursor.fetchone()[0]}")
+
+cursor.execute("SELECT COUNT(*) FROM products") 
+print(f"Products: {cursor.fetchone()[0]}")
+
+cursor.execute("SELECT COUNT(*) FROM orders")
+print(f"Orders: {cursor.fetchone()[0]}")
+
+# View sample data
+cursor.execute("SELECT id, first_name, last_name, email FROM users LIMIT 5")
+users = cursor.fetchall()
+for user in users:
+    print(f"ID: {user[0]}, Name: {user[1]} {user[2]}, Email: {user[3]}")
+
+exit()
+```
+
+### 6. Access the Application
 
 - **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:8000
@@ -104,6 +152,14 @@ assignment-think41/
 │   │   ├── urls.py
 │   │   ├── utils.py
 │   │   └── views.py
+│   ├── archive/              # Sample data CSV files
+│   │   ├── distribution_centers.csv
+│   │   ├── inventory_items.csv
+│   │   ├── order_items.csv
+│   │   ├── orders.csv
+│   │   ├── products.csv
+│   │   └── users.csv
+│   ├── local_data.py         # Data loading script
 │   ├── Dockerfile
 │   ├── manage.py
 │   └── requirements.txt
@@ -140,6 +196,7 @@ The Django backend includes:
 - **CORS Configuration** for frontend communication
 - **PostgreSQL Integration** for data persistence
 - **AI Integration** via Groq API for intelligent responses
+- **Sample Data Models** for e-commerce functionality
 
 ### Frontend Configuration
 
@@ -169,9 +226,9 @@ The application uses the following environment variables:
 The application supports both Docker and local development databases:
 
 **Docker (Production-like)**:
-- Database: `chatapp`
-- User: `chatuser`
-- Password: `chatpassword`
+- Database: `ecommerce`
+- User: `postgres`
+- Password: `admin`
 - Host: `database` (Docker service)
 - Port: `5432`
 
@@ -195,6 +252,74 @@ The application supports both Docker and local development databases:
 - `GET /api/conversations/{id}/` - Get specific conversation
 - `POST /api/conversations/{id}/messages/` - Send message
 - `GET /api/conversations/{id}/messages/` - Get conversation messages
+
+## 🗄️ Database Querying
+
+Since `psql` is not available in the Django container, use Django's shell for database operations:
+
+### Method 1: Django Shell with Raw SQL
+```bash
+# Access the backend container
+docker exec -it chat-backend bash
+
+# Open Django shell
+python manage.py shell
+```
+
+Then execute SQL queries:
+```python
+from django.db import connection
+cursor = connection.cursor()
+
+# Example queries
+cursor.execute("SELECT COUNT(*) FROM users WHERE state = 'California'")
+california_users = cursor.fetchone()[0]
+
+cursor.execute("SELECT category, COUNT(*) FROM products GROUP BY category ORDER BY COUNT(*) DESC LIMIT 5")
+top_categories = cursor.fetchall()
+
+cursor.execute("""
+    SELECT u.first_name, u.last_name, COUNT(o.order_id) as order_count 
+    FROM users u 
+    JOIN orders o ON u.id = o.user_id 
+    GROUP BY u.id, u.first_name, u.last_name 
+    ORDER BY order_count DESC 
+    LIMIT 10
+""")
+top_customers = cursor.fetchall()
+
+cursor.close()
+exit()
+```
+
+### Method 2: Django ORM (Recommended)
+```bash
+python manage.py shell
+```
+
+```python
+from conversations.models import *
+
+# Count records
+print(f"Users: {EcommerceUser.objects.count()}")
+print(f"Products: {Product.objects.count()}")
+print(f"Orders: {Order.objects.count()}")
+
+# Query examples
+from django.db.models import Count
+
+# Top states by user count
+top_states = EcommerceUser.objects.values('state').annotate(
+    count=Count('state')
+).order_by('-count')[:5]
+
+# Top product categories
+top_categories = Product.objects.values('category').annotate(
+    count=Count('category')
+).order_by('-count')[:5]
+
+exit()
+```
 
 ## 🐛 Troubleshooting
 
@@ -221,11 +346,26 @@ docker-compose logs database
 docker-compose restart backend
 ```
 
-**4. CORS errors in browser**
+**4. Data loading fails**
+```bash
+# Check if local_data.py has correct database host
+# Ensure DB_HOST = "database" (not "localhost") in local_data.py
+# Verify CSV files exist in Backend/archive/ directory
+```
+
+**5. psql command not found**
+```bash
+# This is expected - use Django shell instead
+python manage.py shell
+# Or use Django's database shell (requires psql client)
+python manage.py dbshell  # May not work without psql
+```
+
+**6. CORS errors in browser**
 - Ensure frontend URL is added to `CORS_ALLOWED_ORIGINS` in `settings.py`
 - Check that the frontend is running on the expected port
 
-**5. Groq API errors**
+**7. Groq API errors**
 - Verify your API key is correctly set in `Backend/conversations/llm.py`
 - Check your Groq account has sufficient credits
 - Ensure API key has necessary permissions
@@ -258,17 +398,19 @@ docker-compose down -v
 ### Database Management
 
 ```bash
-# Access PostgreSQL directly
-docker-compose exec database psql -U chatuser -d chatapp
-
 # Run Django migrations
 docker-compose exec backend python manage.py makemigrations
 docker-compose exec backend python manage.py migrate
 
 # Create superuser
 docker-compose exec backend python manage.py createsuperuser
-# Alternative method
-docker exec -it chat-backend python manage.py createsuperuser
+
+# Load sample data
+docker exec -it chat-backend bash
+python local_data.py
+
+# Access Django shell for database queries
+docker exec -it chat-backend python manage.py shell
 
 # Collect static files (if needed)
 docker-compose exec backend python manage.py collectstatic

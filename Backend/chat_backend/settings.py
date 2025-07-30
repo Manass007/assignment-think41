@@ -109,23 +109,23 @@ WSGI_APPLICATION = 'chat_backend.wsgi.application'
 
 # Check if we're running in Docker
 if os.environ.get('DATABASE_URL'):
-    # Docker database configuration
+    # Docker database configuration - match docker-compose.yml
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'chatapp',
-            'USER': 'chatuser', 
-            'PASSWORD': 'chatpassword',
-            'HOST': 'database',  # Docker service name
+            'NAME': 'ecommerce',        # Changed from 'chatapp' 
+            'USER': 'postgres',         # Changed from 'chatuser'
+            'PASSWORD': 'admin',        # Changed from 'chatpassword'
+            'HOST': 'database',         # Docker service name
             'PORT': '5432',
         }
     }
 else:
-    # Local development database configuration (keep your existing settings)
+    # Local development database configuration
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'ecommerce',      # This is your database name
+            'NAME': 'ecommerce',
             'USER': 'postgres',
             'PASSWORD': 'admin',
             'HOST': 'localhost',

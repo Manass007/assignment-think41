@@ -5,7 +5,7 @@ import psycopg2
 DB_NAME = "ecommerce"
 DB_USER = "postgres"
 DB_PASSWORD = "admin"  # <-- Replace with your actual password
-DB_HOST = "localhost"
+DB_HOST = "database"
 DB_PORT = "5432"
 
 # Paths to CSV files (adjust if needed)

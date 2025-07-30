@@ -4,7 +4,7 @@ import os
 from typing import Dict, List, Any
 import re
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "your_access_key_here")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "your-groq-api-key-here")
 
 # Fashion categories mapping for better understanding
 FASHION_CATEGORIES = {
