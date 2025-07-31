@@ -446,10 +446,6 @@ For production deployment, consider:
 4. Add tests if applicable
 5. Submit a pull request
 
-## 📝 License
-
-[Add your license information here]
-
 ## 📞 Support
 
 If you encounter any issues or have questions:
